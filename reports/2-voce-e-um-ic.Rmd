@@ -40,6 +40,73 @@ glimpse(lastfm)
 Utilizaremos ICs para estimar duas métricas sobre os usuários do LastFM em geral durante um período de 6 meses. Em ambos os casos faremos isso a partir de uma amostra de 300 usuários. As duas métricas são: 
 
 1. Qual a proporção de novos artistas em geral escutada por usuários?
+
+```{r}
+calcula_theta <- function(df){
+    df_proporcao <- df %>% mutate(prop = news/(news+old))
+    df_proporcao <- df_proporcao %>% pull(prop)
+    return(mean(df_proporcao))
+}
+
+theta_c <- calcula_theta(lastfm)
+```
+
+Fazendo o bootstrap
+
+```{r}
+repeticoes = 2000
+
+bootstrap <- function(df){
+    boot_df <- df %>%
+      sample_n(size = NROW(df),
+             replace = TRUE)
+    return(calcula_theta(boot_df))
+}
+    
+set.seed(1234)
+
+reamostragens = tibble(i = 1:repeticoes) %>% 
+  mutate(theta_c_s = map_dbl(i, ~ bootstrap(lastfm)))
+
+reamostragens
+```
+
+```{r}
+intervalo <- reamostragens %>% 
+  mutate(erro = theta_c_s - theta_c) %>% 
+  summarise(erro_i = quantile(erro, .05), 
+            erro_s = quantile(erro, .95))
+
+intervalo = intervalo %>% 
+  mutate(valor_i = theta_c + erro_i, 
+         valor_s = theta_c + erro_s)
+
+ggplot() +
+  geom_rect(
+    data = intervalo,
+    aes(xmin = valor_i, xmax = valor_s),
+    ymin = -Inf,
+    ymax = Inf,
+    fill = "gold",
+    alpha = .25
+  ) +
+  stat_density(
+    data = reamostragens,
+    aes(theta_c_s),
+    bw = .0005,
+    fill = "white",
+    colour = "darkgrey"
+  )+
+    geom_vline(xintercept = theta_c, color = "dark green")+
+    labs(x="Theta",y="Frequency")
+
+```
+
+```{r}
+intervalo %>% select(valor_i, valor_s)
+```
+
+
 2. Para os usuários que gostam de música muito pop (mediana_pop > 5), qual a correlação entre a popularidade mediana dos artistas escutado e a proporção dos artistas escutados que eram novos. 
 
 Crie intervalos com 95% de confiança.
